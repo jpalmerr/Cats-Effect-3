@@ -1,8 +1,9 @@
 package james.part2effects
 
-import com.rockthejvm.part2effects.Effects.MyIO
+import com.rockthejvm.part2effects.Effects.{MyIO, putStrLn, read}
 
 import scala.concurrent.Future
+import scala.io.StdIn
 
 object Effects {
 
@@ -92,9 +93,54 @@ object Effects {
       (when externally visible side effects are produced)
   */
 
+  /* Exercises
+      1. An IO which returns the current time of the system
+      2. An IO which measures the duration of a computation
+      3. An IO which prints something from the console
+      4. An IO which reads a line from std input
+  */
+
+  // 1
+  val timeIO: MyIO[Long] = MyIO(() => System.currentTimeMillis())
+
+  // 2
+  def measure[A](computation: MyIO[A]): MyIO[Long] = for {
+    start <- timeIO
+    _     <- computation
+    finish <- timeIO
+  } yield finish - start
+
+  def demo(): Unit = {
+    val myComputation = MyIO(() => Thread.sleep(1000))
+    val demo: MyIO[Long] = measure(myComputation)
+    println(demo.unsafeRun())
+  }
+
+  // 3
+  def putStrLn(l: String): MyIO[Unit] = MyIO(() => println(l))
+
+  // 4
+  def read: MyIO[String] = MyIO(() => StdIn.readLine())
+
+  def test(): Unit = {
+    val program: MyIO[Unit] = for {
+      line1 <- read
+      line2 <- read
+      _ <- putStrLn(line1 + " " + line2)
+    } yield ()
+
+    program.unsafeRun()
+  }
+
+
 
   def main(args: Array[String]): Unit = {
     anIO.unsafeRun()
+
+    demo()
+
+    test()
   }
 
+  // run console will wait for 2 inputs
 }
