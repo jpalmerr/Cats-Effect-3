@@ -1,6 +1,6 @@
 package james.part3concurrency
 
-import cats.effect.{IO, IOApp}
+import cats.effect.{IO, IOApp, Resource}
 import james.utils.*
 
 import java.io.{File, FileReader}
@@ -66,8 +66,42 @@ class Connection(url: String) {
       }
   }
 
+  /**
+   * Resources
+   */
+
+  def connectionFromConfig(path: String): IO[Unit] =
+    openFileScanner(path).bracket { scanner =>
+      // acquire a connection based on the file
+      IO(new Connection(scanner.nextLine())).bracket { conn =>
+        conn.open.debug >> IO.never
+      }(conn => conn.close.debug.void)
+    }(scanner => IO("closing file").debug >> IO(scanner.close()))
+    // nesting resources are tedious
+
+    // Resource.make(acquire)(release)
+    val connectionResource = Resource.make(IO(new Connection("james")))(conn => conn.close.void) // usage can happen later
+
+    val resourceFetchUrl = for {
+      fib <- connectionResource.use(conn => conn.open >> IO.never)
+      _ <- IO.sleep(1.second) >> fib.cancel
+    } yield ()
+
+    // resources are equivalent to brackets
+
+    val simpleResource = IO("some resource")
+    val usingResource: String => IO[String] = string => IO(s"using the string: $string").debug
+    val releaseResource: String => IO[Unit] = string => IO(s"finalizing the string: $string").debug.void
+
+    val usingResourceWithBracket = simpleResource.bracket(usingResource)(releaseResource)
+    val usingResourceWithResource = Resource.make(simpleResource)(releaseResource).use(usingResource)
+
+
+
+
   override def run: IO[Unit] = {
 //    bracketProgram.void
     bracketReadFile("src/main/scala/james/part3concurrency/Resources.scala")
+//    resourceFetchUrl.void // doesn't like the type of fib for some reason
   }
 }
